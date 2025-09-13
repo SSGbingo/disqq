@@ -1,27 +1,311 @@
 <!DOCTYPE html>
-<html>
-  <head>
-	<meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-	<title>RSPH-Update Log</title>
-  </head>
-      <style>
-    h3 {
-      color:rgb(255, 117, 249);
-      }
-    </style>
-        <style>
-    p {
-      color:rgb(255, 153, 0);
-      }
-    </style>
-  <body>
-  	<h3>2023/4/5</h3>
-<p>-新关卡：云空</p> 
-<br>
-	<h3>2023/4/1</h3>
-<p>-新增选项:滑动灵敏度、视角切换、音乐播放器
-<br>-新增选项:无UI模式、球阴影
-<br>-新增制作人员名单</p> 
-<p>Tips:点碟片可自定义播放场景菜单音乐</p>
-  </body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加密解密</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+    * {
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background-color: #f2f2f2;
+    }
+
+    h1 {
+      text-align: center;
+      margin-top: 50px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-wrap: wrap;
+    }
+
+    label {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 200px;
+      padding: 10px;
+      margin-bottom: 20px;
+      border-radius: 5px;
+      border: none;
+      resize: none;
+    }
+
+    button {
+      background-color: #4CAF50;
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 10px 20px;
+      margin-right: 10px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+
+    button:hover {
+      background-color: #3E8E41;
+    }
+
+    .output {
+      width: 100%;
+      margin-bottom: 20px;
+    }
+
+    .download-link {
+      display: none;
+    }
+    
+    .textarea-container {
+      position: relative;
+    }
+    
+    .paste-btn {
+      position: absolute;
+      left: 5px;
+      bottom: 25px;
+      background-color: #2196F3;
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    
+    .paste-btn:hover {
+      background-color: #0b7dda;
+    }
+    
+    .auto-process-btn {
+      background-color: #9C27B0;
+    }
+    
+    .auto-process-btn:hover {
+      background-color: #7B1FA2;
+    }
+    
+    /* 添加权限提示样式 */
+    .permission-hint {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #333;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+    <h2>原版RS 加密解密</h2>
+    <div class="textarea-container">
+        <label for="plaintext">明文:</label><br>
+        <textarea id="plaintext"></textarea>
+        <button class="paste-btn" id="pastePlaintextBtn">粘贴</button>
+    </div>
+    <div class="textarea-container">
+        <label for="encrypted">密文:</label><br>
+        <textarea id="encrypted"></textarea>
+        <button class="paste-btn" id="pasteEncryptedBtn">粘贴</button>
+    </div>
+    <div>
+        <button onclick="encrypt()">加密</button>
+        <button onclick="decrypt()">解密</button>
+        <button onclick="copyToClipboard('encrypted')">复制密文</button>
+        <button onclick="copyToClipboard('plaintext')">复制明文</button>
+        <button class="auto-process-btn" id="autoProcessBtn">一键粘贴解加复制</button>
+    </div>
+    
+    <!-- 权限提示框 -->
+    <div class="permission-hint" id="permissionHint">
+        请点击"允许"以使用剪贴板功能
+    </div>
+
+    <script>
+        // 全局状态
+        const state = {
+            clipboardPermission: 'unknown' // 'granted', 'denied', 'unknown'
+        };
+        
+        // DOM元素
+        const dom = {
+            plaintext: document.getElementById('plaintext'),
+            encrypted: document.getElementById('encrypted'),
+            pastePlaintextBtn: document.getElementById('pastePlaintextBtn'),
+            pasteEncryptedBtn: document.getElementById('pasteEncryptedBtn'),
+            autoProcessBtn: document.getElementById('autoProcessBtn'),
+            permissionHint: document.getElementById('permissionHint')
+        };
+        
+        // 初始化
+        function init() {
+            // 检查剪贴板权限状态
+            checkClipboardPermission();
+            
+            // 添加事件监听器
+            dom.pastePlaintextBtn.addEventListener('click', () => pasteToTextarea('plaintext'));
+            dom.pasteEncryptedBtn.addEventListener('click', () => pasteToTextarea('encrypted'));
+            dom.autoProcessBtn.addEventListener('click', autoProcess);
+            
+            // 监听权限变化
+            navigator.permissions?.query({name: 'clipboard-read'}).then(permission => {
+                permission.onchange = () => {
+                    state.clipboardPermission = permission.state;
+                    updatePermissionUI();
+                };
+            });
+        }
+        
+        // 检查剪贴板权限状态
+        async function checkClipboardPermission() {
+            try {
+                const permission = await navigator.permissions?.query({name: 'clipboard-read'});
+                state.clipboardPermission = permission?.state || 'unknown';
+                updatePermissionUI();
+            } catch (e) {
+                state.clipboardPermission = 'unknown';
+            }
+        }
+        
+        // 更新权限相关UI
+        function updatePermissionUI() {
+            if (state.clipboardPermission === 'denied') {
+                dom.permissionHint.textContent = '剪贴板权限被拒绝，请在浏览器设置中启用';
+                dom.permissionHint.style.display = 'block';
+            }
+        }
+        
+        // 加密函数
+        function encrypt() {
+            const plaintext = dom.plaintext.value;
+            const key = CryptoJS.enc.Utf8.parse('20150528');
+            const iv = CryptoJS.enc.Utf8.parse('12345678');
+            const encrypted = CryptoJS.DES.encrypt(plaintext, key, { 
+                iv: iv, 
+                mode: CryptoJS.mode.CBC, 
+                padding: CryptoJS.pad.Pkcs7 
+            });
+            dom.encrypted.value = encrypted.toString();
+        }
+        
+        // 解密函数
+        function decrypt() {
+            const ciphertext = dom.encrypted.value;
+            const key = CryptoJS.enc.Utf8.parse('20150528');
+            const iv = CryptoJS.enc.Utf8.parse('12345678');
+            const decrypted = CryptoJS.DES.decrypt(
+                { ciphertext: CryptoJS.enc.Base64.parse(ciphertext) }, 
+                key, 
+                { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+            );
+            dom.plaintext.value = decrypted.toString(CryptoJS.enc.Utf8);
+        }
+        
+        // 复制到剪贴板
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).value;
+            navigator.clipboard.writeText(text).catch(err => {
+                console.error('复制失败:', err);
+            });
+        }
+        
+        // 优化后的粘贴功能
+        async function pasteToTextarea(elementId) {
+            try {
+                // 显示权限提示（如果需要）
+                if (state.clipboardPermission === 'unknown') {
+                    dom.permissionHint.textContent = '请点击"允许"以使用剪贴板功能';
+                    dom.permissionHint.style.display = 'block';
+                    setTimeout(() => {
+                        dom.permissionHint.style.display = 'none';
+                    }, 3000);
+                }
+                
+                // 尝试使用现代API
+                let text;
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    text = await navigator.clipboard.readText();
+                } else {
+                    // 回退方案：使用document.execCommand
+                    const textarea = document.createElement('textarea');
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    const success = document.execCommand('paste');
+                    if (!success) throw new Error('无法访问剪贴板');
+                    text = textarea.value;
+                    document.body.removeChild(textarea);
+                }
+                
+                document.getElementById(elementId).value = text;
+                return text;
+            } catch (err) {
+                console.error('粘贴失败:', err);
+                if (state.clipboardPermission !== 'denied') {
+                    alert('粘贴失败: ' + err.message);
+                }
+                return null;
+            } finally {
+                // 更新权限状态
+                await checkClipboardPermission();
+            }
+        }
+        
+        // 一键处理功能
+        async function autoProcess() {
+            try {
+                // 1. 粘贴至密文栏
+                const ciphertext = await pasteToTextarea('encrypted');
+                if (!ciphertext) return;
+                
+                // 2. 解密
+                const key = CryptoJS.enc.Utf8.parse('20150528');
+                const iv = CryptoJS.enc.Utf8.parse('12345678');
+                const decrypted = CryptoJS.DES.decrypt(
+                    { ciphertext: CryptoJS.enc.Base64.parse(ciphertext) }, 
+                    key, 
+                    { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+                );
+                const plaintext = decrypted.toString(CryptoJS.enc.Utf8);
+                dom.plaintext.value = plaintext;
+                
+                // 3. 加密
+                const encrypted = CryptoJS.DES.encrypt(
+                    plaintext, 
+                    key, 
+                    { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+                );
+                const newCiphertext = encrypted.toString();
+                dom.encrypted.value = newCiphertext;
+                
+                // 4. 自动复制到剪贴板
+                await navigator.clipboard.writeText(newCiphertext).catch(err => {
+                    console.error('复制失败:', err);
+                });
+            } catch (error) {
+                console.error('自动处理失败:', error);
+            }
+        }
+        
+        // 启动应用
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
 </html>
